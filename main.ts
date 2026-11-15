@@ -1,9 +1,22 @@
-// BREAKWATER — a BTC trading bot for make.fun's "Race a BTC trading bot live for 24 hours".
+// BREAKWATER v2 — a BTC trading bot for make.fun's "Race a BTC trading bot live for 24 hours".
 //
 // The idea, in one sentence: sail only when the tide turns — scout the breakout
 // with a small position, top up to full size when the 4-hour tide confirms it,
-// trail the peak, and beach the boat for the rest of the window after $10 of
+// trail the peak, and beach the boat for the rest of the window after $4 of
 // realised losses so a choppy sea can never sink it.
+//
+// v2 changes (from the shipped v1): the loss budget tightened $10 -> $4 and
+// the scout grew 25% -> 40%. Why: the dev window's three trades are all
+// winners, so the budget never binds there — the budget only matters on
+// windows where the bot churns, and there a tight budget is what saves it.
+// On the mirror-image (rising) window v1 loses -$19.99 in 10 churned trades;
+// v2 beaches after two and loses -$6.68. The scout is bigger because the
+// dev window's money trade enters as a scout (tide against at the breakout)
+// and only tops up once the tide turns — a 40% scout holds more of the move
+// before the top-up lands. Both changes were picked on the COMBINATION of the
+// dev window and the mirror window, never on the dev window alone: a +3%
+// take-profit looked better on dev (+$26.47) but was a spike at exactly +3%
+// (worse at +2% and +2.5%, neutral above it), so it was rejected as overfit.
 //
 // Why this shape? The replay is long-only on 1-minute cbBTC bars and a full-size
 // round trip costs ~26-42 bps (4 bps fee + 2 bps slippage + pool price impact),
@@ -15,7 +28,7 @@
 //      A breakout is a fact about the tape, not a forecast: it means buyers just
 //      paid more than anyone did in the last hour.
 //   2. TIDE — the 4-hour (240-bar) return decides the size. Tide with us
-//      (return > -0.5%): full size. Tide against us: a 25% scout. The scout
+//      (return > -0.5%): full size. Tide against us: a 40% scout. The scout
 //      keeps the bot in the race — it guarantees we are never the bot that
 //      never trades — and if the tide turns while we hold it, we top the
 //      position up to full size instead of watching the move leave without us.
@@ -24,14 +37,17 @@
 //      hour) and cuts a failed breakout after about one round trip of costs.
 //      A 4-hour maximum hold closes anything the trail has not.
 //   4. BEACH — a circuit breaker on realised PnL: once cumulative realised
-//      losses pass $10 (1% of the $1,000 stake), stop trading for the rest of
+//      losses pass $4 (0.4% of the $1,000 stake), stop trading for the rest of
 //      the window. In a whipsaw regime the bot's worst case is a small,
 //      bounded loss; it never grinds itself to zero one breakout at a time.
+//      The dev window never triggers it (all three trades win); the mirror
+//      window triggers it after two trades, which is the point.
 //
 // Backtest (kit dev window, 24h, BTC -4.0% peak-to-trough, exact fill model
-// with fee + slippage + pool impact): net PnL +$20.71, 8 orders, max drawdown
-// 0.83%. Buy-and-hold on the same window loses ~-$40. The same rules on the
-// mirror-image (rising) window lose at most -$19.99 with the breaker engaged.
+// with fee + slippage + pool impact): net PnL +$21.34, 8 orders, max drawdown
+// 0.84%. Buy-and-hold on the same window loses ~-$40. The same rules on the
+// mirror-image (rising) window lose at most -$6.68 with the breaker engaged
+// (v1: -$19.99), and on the time-reversed window -$6.58 (v1: -$10.75).
 //
 // Deterministic by construction: no clock, no environment, no randomness —
 // every decision is a pure function of the bars seen so far.
@@ -45,10 +61,10 @@ const SYMBOL = 'CBBTC';
 const BREAKOUT_BARS = 60; // Donchian window: highest high of the last hour
 const TIDE_BARS = 240; // 4-hour return decides scout vs full size
 const TIDE_FLOOR = -0.005; // tide "with us" when the 4h return beats -0.5%
-const SCOUT_BPS = 2500; // scout size: 25% of equity
+const SCOUT_BPS = 4000; // scout size: 40% of equity (v2: was 25%)
 const TRAIL_BPS = 50; // trailing stop: 0.5% below the peak close since entry
 const MAX_HOLD_BARS = 240; // 4-hour maximum hold
-const LOSS_BUDGET_UNITS = 10_000_000; // $10 in micro-USDC (quote units)
+const LOSS_BUDGET_UNITS = 4_000_000; // $4 in micro-USDC (quote units) (v2: was $10)
 const MAX_SLIPPAGE_BPS = 200; // generous headroom over the ~6 bps a fill costs
 
 interface TradeState {
