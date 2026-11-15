@@ -118,6 +118,9 @@ await runBars({
         st.entryEquity = equity;
         st.fullSize = aligned;
         st.trail = close * (1 - TRAIL_BPS / 10_000);
+        console.error(
+          `breakwater bar ${state.seq} ENTER ${aligned ? 'full' : 'scout'} close=${close.toFixed(2)} tide=${(tide * 100).toFixed(2)}% spend=${spend}`,
+        );
         return [
           {
             side: 'buy',
@@ -135,6 +138,9 @@ await runBars({
       const room = state.weightRoom(SYMBOL);
       if (room >= 1_000_000n) {
         st.fullSize = true;
+        console.error(
+          `breakwater bar ${state.seq} TOPUP close=${close.toFixed(2)} tide=${(tide * 100).toFixed(2)}% room=${room}`,
+        );
         return [
           {
             side: 'buy',
@@ -156,6 +162,9 @@ await runBars({
       st.realised += equity - st.entryEquity;
       if (st.realised <= -BigInt(LOSS_BUDGET_UNITS)) st.beached = true;
       st.trail = 0;
+      console.error(
+        `breakwater bar ${state.seq} EXIT close=${close.toFixed(2)} held=${heldBars} realised=${st.realised} beached=${st.beached}`,
+      );
       return [
         {
           side: 'sell',
